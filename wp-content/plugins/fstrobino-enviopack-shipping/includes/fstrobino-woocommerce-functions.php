@@ -1,86 +1,80 @@
 <?php
 /**
-* OCA PHP API Class
-* Wanderlust Web Design - 2015
+* envioPack API Class
+* fstrobino Campos Verdes - 2017
 */
 
-class Oca {
+class EnvioPack {
 	const VERSION				= '1';
-	protected $webservice_url	= 'webservice.oca.com.ar';
+	protected $webservice_url	= 'https://api.enviopack.com';
 		
-	public function __construct($Cuit = '', $Operativa = '') {
-		$this->Cuit 		= trim($Cuit);
-		$this->Operativa 	= trim($Operativa);
+	public function __construct() {
 	}
 	
 	
 	public function setUserAgent() {
-		return 'OCA-PHP-API ' . self::VERSION . ' - WANDERLUST/OCA-PHP-API';
+		return 'ENVIOPACK-PHP-API ' . self::VERSION . ' - FSTROBINO/ENVIOPACK-PHP-API';
 	}
 
-	public function tarifarEnvioCorporativo($PesoTotal, $VolumenTotal, $CodigoPostalOrigen, $CodigoPostalDestino, $CantidadPaquetes, $ValorDeclarado) {
-		$_query_string = array(	'PesoTotal'				=> $PesoTotal,
-								'VolumenTotal'			=> $VolumenTotal,
-								'CodigoPostalOrigen'	=> $CodigoPostalOrigen,
-								'CodigoPostalDestino'	=> $CodigoPostalDestino,
-								'CantidadPaquetes'		=> $CantidadPaquetes,
-								'ValorDeclarado'		=> $ValorDeclarado,
-								'Cuit'					=> $this->Cuit,
-								'Operativa'				=> $this->Operativa);
-		
-		$ch = curl_init();
-		curl_setopt_array($ch,	array(	CURLOPT_RETURNTRANSFER	=> TRUE,
-										CURLOPT_HEADER			=> FALSE,
-										CURLOPT_USERAGENT		=> $this->setUserAgent(),
-										CURLOPT_CONNECTTIMEOUT	=> 5,
-										CURLOPT_POST			=> TRUE,
-										CURLOPT_POSTFIELDS		=> http_build_query($_query_string),
-										CURLOPT_URL				=> "{$this->webservice_url}/epak_tracking/Oep_TrackEPak.asmx/Tarifar_Envio_Corporativo",
-										CURLOPT_FOLLOWLOCATION	=> TRUE));
+	public function getAccessToken($api_key = '', $api_secret = '') {
 
-		$dom = new DOMDocument();
-		@$dom->loadXML(curl_exec($ch));
-		$xpath = new DOMXpath($dom);
-		$e_corp = array();
-		foreach (@$xpath->query("//NewDataSet/Table") as $envio_corporativo) {
-			$e_corp[] = array(	'Tarifador'		=> $envio_corporativo->getElementsByTagName('Tarifador')->item(0)->nodeValue,
-								'Precio'		=> $envio_corporativo->getElementsByTagName('Precio')->item(0)->nodeValue,
-								'Ambito'		=> $envio_corporativo->getElementsByTagName('Ambito')->item(0)->nodeValue,
-								'PlazoEntrega'	=> $envio_corporativo->getElementsByTagName('PlazoEntrega')->item(0)->nodeValue,
-								'Adicional'		=> $envio_corporativo->getElementsByTagName('Adicional')->item(0)->nodeValue,
-								'Total'			=> $envio_corporativo->getElementsByTagName('Total')->item(0)->nodeValue,
-							);
-		}
+		$data = array("api-key" => $api_key, "secret-key" => $api_secret);
+		$data_string = json_encode($data);
 		
-		return $e_corp;
-	}
-
-	public function trackingPieza($pieza = '', $nroDocumentoCliente = '') {
-		$_query_string = array(	'Pieza'					=> $pieza,
-								'NroDocumentoCliente'	=> $nroDocumentoCliente,
-								'Cuit'					=> $this->Cuit,
-							);
-
-		$ch = curl_init();
+		// Vamos a hacer CURL POST
+		$ch = curl_init("{$this->webservice_url}/auth");
+		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_USERAGENT, $this->setUserAgent());
+		curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+    			'Content-Type: application/json',
+    			'Content-Length: ' . strlen($data_string))
+		);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
 		
-		curl_setopt_array($ch,	array(	CURLOPT_RETURNTRANSFER	=> TRUE,
-										CURLOPT_HEADER			=> FALSE,
-										CURLOPT_USERAGENT		=> $this->setUserAgent(),
-										CURLOPT_CONNECTTIMEOUT	=> 5,
-										CURLOPT_POST			=> TRUE,
-										CURLOPT_POSTFIELDS		=> http_build_query($_query_string),
-										CURLOPT_URL				=> "{$this->webservice_url}/epak_tracking/Oep_TrackEPak.asmx/Tracking_Pieza",
-										CURLOPT_FOLLOWLOCATION	=> TRUE));
-		$dom = new DOMDocument();
-		@$dom->loadXML(curl_exec($ch));
-		$xpath = new DOMXpath($dom);	
+		//execute post
+		$result = curl_exec($ch);
+		//decode json to array
+		$response_array = json_decode($result);
+		//close connection
+		curl_close($ch);
 		
-		$envio = array();
-		foreach (@$xpath->query("//NewDataSet/Table") as $tp) {
-			$envio[] = array();
-		}
-		
-		return $envio;
-				
+		return $response_array;				
 	}	
+
+
+	public function calcularEnvioPorDestino($accessToken, $provincia, $codigoPostal, $peso, $servicio) {
+		
+		$query_string = array(	'access_token'	=> $accessToken,
+								'provincia'		=> $provincia,
+								'codigo_postal'	=> $codigoPostal,
+								'peso'			=> $peso,
+								'servicio'		=> $servicio);
+
+		$url = "{$this->webservice_url}/cotizar/precio/por-provincia";
+
+		// Vamos a hacer CURL GET
+
+		// create curl resource
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+		curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+
+		// set url
+		$query = http_build_query($query_string);
+		curl_setopt($ch, CURLOPT_URL, "$url?$query");
+		
+		//execute call
+		$result = curl_exec($ch);
+		//decode json to array
+		$response_array = json_decode($result);
+		//close connection
+		curl_close($ch);
+		
+		return $response_array;
+	}
 }
